@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from discriminator.patch_resnet_discriminator import PatchResnetDiscriminator
-from generator.u_net_generator_v2 import UNetGenerator
+from generator.u_net_generator_128 import UNetGenerator
 from collections import Counter
 from source.preprocessing import rgb_to_gray, normalize
 import tensorflow_datasets as tfds
@@ -59,7 +59,7 @@ test_dataset = test_dataset.batch(BATCH_SIZE)
 
 basefolder = "./records/1562972964.7331862"
 
-generator = UNetGenerator(n_classes=2)
+generator = UNetGenerator(output_depth=2)
 discriminator = PatchResnetDiscriminator(ch=64)
 
 gen_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.0, beta_2=0.9)
