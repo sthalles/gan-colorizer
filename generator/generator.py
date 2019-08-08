@@ -1,6 +1,8 @@
 import tensorflow as tf
 from layers.blocks import DownSample, UpSample
 from layers.orthogonal_regularization import dense_orthogonal_regularizer, conv_orthogonal_regularizer
+from layers.conv_sn import SNConv2D
+from layers.transpose_conv_sn import SNTransposeConv2D
 
 
 class UNetGenerator(tf.keras.Model):
@@ -40,14 +42,14 @@ class UNetGenerator(tf.keras.Model):
         self.up7 = UpSample(ch, 4, initializer=initializer,
                             kernel_regularizer=kernel_regularizer)  # (bs, 128, 128, 128)
 
-        self.last = tf.keras.layers.Conv2DTranspose(output_depth, 4,
+        self.last = SNTransposeConv2D(output_depth, 4,
                                                     strides=2,
-                                                    padding='same',
+                                                    padding='SAME',
                                                     kernel_initializer=initializer,
-                                                    kernel_regularizer=kernel_regularizer,
-                                                    activation='tanh')  # (bs, 256, 256, 3)
+                                                    kernel_regularizer=kernel_regularizer)  # (bs, 256, 256, 3)
 
         self.concat = tf.keras.layers.Concatenate()
+        self.tanh = tf.keras.layers.Activation('tanh')
 
     def call(self, h, sn_update, **kwargs):
         down1 = self.down1(h, sn_update=sn_update, **kwargs)
@@ -80,5 +82,5 @@ class UNetGenerator(tf.keras.Model):
         h = self.up7(h, sn_update=sn_update, **kwargs)
         h = self.concat([h, down1])
 
-        h = self.last(h)
-        return h
+        h = self.last(h, sn_update=sn_update)
+        return self.tanh(h)

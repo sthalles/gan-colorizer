@@ -45,7 +45,7 @@ train_dataset = train_dataset.map(lambda x: random_crop(x, PATCH_SIZE, PATCH_SIZ
 train_dataset = train_dataset.map(random_flip)
 train_dataset = train_dataset.map(rgb_to_lab)
 train_dataset = train_dataset.map(preprocess_lab)
-# train_dataset = train_dataset.map(random_noise)
+train_dataset = train_dataset.map(random_noise)
 train_dataset = train_dataset.repeat(EPOCHS)
 train_dataset = train_dataset.shuffle(BUFFER_SIZE)
 train_dataset = train_dataset.batch(BATCH_SIZE)
@@ -164,9 +164,10 @@ kwargs = {'training': True}
 def train_step(L_batch, AB_batch):
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         fake_batch = generator(L_batch, sn_update=True, **kwargs)
+        regularization_loss = tf.math.add_n(generator.losses)
 
         disc_patch_real = discriminator(tf.concat([L_batch, AB_batch], axis=3), sn_update=True, **kwargs)
-        disc_patch_fake = discriminator(tf.concat([L_batch, fake_batch], axis=3), sn_update=True, **kwargs)
+        disc_patch_fake = discriminator(tf.concat([L_batch, fake_batch], axis=3), sn_update=False, **kwargs)
 
         gen_patch_loss = gen_binary_cross_entropy(disc_generated_output=disc_patch_fake)
         disc_loss = disc_binary_cross_entropy(disc_real_output=disc_patch_real, disc_generated_output=disc_patch_fake)
@@ -175,7 +176,7 @@ def train_step(L_batch, AB_batch):
         l1_loss = gen_l1_loss(fake_batch, AB_batch, lambda_=100)
 
         # total generator loss
-        gen_loss = gen_patch_loss + l1_loss
+        gen_loss = gen_patch_loss + l1_loss + regularization_loss
 
     tf.summary.histogram(name="real_image_discributions", data=AB_batch, step=dis_optimizer.iterations)
     tf.summary.histogram(name="fake_image_discributions", data=fake_batch, step=dis_optimizer.iterations)
