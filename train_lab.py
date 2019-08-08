@@ -1,6 +1,6 @@
 import tensorflow as tf
 # from discriminator.patch_resnet_discriminator import PatchResnetDiscriminator
-from discriminator.snresnet_128 import SNResNetPatchGanDiscriminator
+from discriminator.patch_resnet_discriminator import SNResNetPatchGanDiscriminator
 from generator.u_net_generator_128 import UNetGenerator
 from source.loss import gen_l1_loss, loss_hinge_dis, loss_hinge_gen, gen_binary_cross_entropy, disc_binary_cross_entropy
 import time
@@ -13,6 +13,8 @@ from source.lab_preprocessing import *
 from source.image_processing import *
 import yaml
 import importlib
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Read YAML file
 with open("./config/coco.yml", 'r') as stream:
@@ -73,9 +75,9 @@ copyfile('./train_lab.py', os.path.join(basefolder, 'train_lab.py'))
 
 retrain_from = None
 if retrain_from is not None:
-  checkpoint_dir = './records/' + retrain_from + '/checkpoints'
+    checkpoint_dir = './records/' + retrain_from + '/checkpoints'
 else:
-  checkpoint_dir = os.path.join(basefolder, 'checkpoints')
+    checkpoint_dir = os.path.join(basefolder, 'checkpoints')
 
 checkpoint = tf.train.Checkpoint(generator_optimizer=gen_optimizer,
                                  discriminator_optimizer=dis_optimizer,
@@ -86,132 +88,127 @@ manager = tf.train.CheckpointManager(checkpoint, checkpoint_dir, max_to_keep=2)
 # load checkpoints to continue training
 checkpoint.restore(manager.latest_checkpoint)
 if manager.latest_checkpoint:
-  print("Restored from {}".format(manager.latest_checkpoint))
+    print("Restored from {}".format(manager.latest_checkpoint))
 else:
-  print("Initializing from scratch.")
+    print("Initializing from scratch.")
 
 
 def generate_images(model, L_batch, AB_batch):
-  # the training=True is intentional here since
-  # we want the batch statistics while running the model
-  # on the test dataset. If we use training=False, we will get
-  # the accumulated statistics learned from the training dataset
-  # (which we don't want)
+    # the training=True is intentional here since
+    # we want the batch statistics while running the model
+    # on the test dataset. If we use training=False, we will get
+    # the accumulated statistics learned from the training dataset
+    # (which we don't want)
 
-  fake_image = model(L_batch, sn_update=False, training=True)
+    fake_image = model(L_batch, sn_update=False, training=True)
 
-  a_chan_fake, b_chan_fake = tf.unstack(fake_image, axis=3)
-  fake_lab_image = deprocess_lab(L_batch, a_chan_fake, b_chan_fake)
-  fake_rgb_image = lab_to_rgb(fake_lab_image)
+    a_chan_fake, b_chan_fake = tf.unstack(fake_image, axis=3)
+    fake_lab_image = deprocess_lab(L_batch, a_chan_fake, b_chan_fake)
+    fake_rgb_image = lab_to_rgb(fake_lab_image)
 
-  a_chan, b_chan = tf.unstack(AB_batch, axis=3)
-  real_lab_image = deprocess_lab(L_batch, a_chan, b_chan)
-  real_rgb_image = lab_to_rgb(real_lab_image)
+    a_chan, b_chan = tf.unstack(AB_batch, axis=3)
+    real_lab_image = deprocess_lab(L_batch, a_chan, b_chan)
+    real_rgb_image = lab_to_rgb(real_lab_image)
 
-  tf.summary.image('generator_image', fake_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
-  tf.summary.image('input_image', (L_batch + 1) * 0.5, max_outputs=12, step=gen_optimizer.iterations)
-  tf.summary.image('target_image', real_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
+    tf.summary.image('generator_image', fake_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
+    tf.summary.image('input_image', (L_batch + 1) * 0.5, max_outputs=12, step=gen_optimizer.iterations)
+    tf.summary.image('target_image', real_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
 
 
-kargs = {'training': True}
+kwargs = {'training': True}
 
-@tf.function
-def generator_train_step(L_batch, AB_batch):
-  with tf.GradientTape() as gen_tape:
-    fake_image = generator(L_batch, sn_update=True, **kargs)
-    disc_fake_loss = discriminator(tf.concat([L_batch, fake_image], axis=3), sn_update=True)
 
-    regularization_loss = tf.math.add_n(generator.losses)
-    hinge_loss = loss_hinge_gen(dis_fake=disc_fake_loss)
+# # @tf.function
+# def generator_train_step(L_batch, AB_batch):
+#   with tf.GradientTape() as gen_tape:
+#
+#     fake_image = generator(L_batch, sn_update=True, **kargs)
+#     disc_fake_loss = discriminator(tf.concat([L_batch, fake_image], axis=3), sn_update=True)
+#
+#     regularization_loss = tf.math.add_n(generator.losses)
+#     hinge_loss = loss_hinge_gen(dis_fake=disc_fake_loss)
+#
+#     # L1 Loss could compare the 3 channel image instead of only the AB channel
+#     l1_loss = gen_l1_loss(fake_image, AB_batch, lambda_=100)
+#     gen_loss = hinge_loss + regularization_loss + l1_loss
+#
+#   tf.summary.scalar('generator_l1_loss', l1_loss, step=gen_optimizer.iterations)
+#   tf.summary.scalar('generator_hinge_loss', hinge_loss, step=gen_optimizer.iterations)
+#   tf.summary.scalar('generator_regularization_loss', regularization_loss, step=gen_optimizer.iterations)
+#   tf.summary.scalar('generator_total_loss', gen_loss, step=gen_optimizer.iterations)
+#
+#   generator_gradients = gen_tape.gradient(gen_loss,
+#                                           generator.trainable_variables)
+#   gen_optimizer.apply_gradients(zip(generator_gradients,
+#                                     generator.trainable_variables))
+#
+# # @tf.function
+# def discriminator_train_step(L_batch, AB_batch):
+#   with tf.GradientTape() as disc_tape:
+#     disc_real_loss = discriminator(tf.concat([L_batch, AB_batch], axis=3), sn_update=True)
+#
+#     fake_batch = generator(L_batch, sn_update=True, **kargs)
+#
+#     disc_fake_loss = discriminator(tf.concat([L_batch, fake_batch], axis=3), sn_update=True)
+#
+#     disc_loss = loss_hinge_dis(dis_fake=disc_fake_loss, dis_real=disc_real_loss)
+#
+#   tf.summary.scalar('discriminator_loss', disc_loss, step=dis_optimizer.iterations)
+#   discriminator_gradients = disc_tape.gradient(disc_loss,
+#                                                discriminator.trainable_variables)
+#
+#   dis_optimizer.apply_gradients(zip(discriminator_gradients,
+#                                     discriminator.trainable_variables))
 
-    # L1 Loss could compare the 3 channel image instead of only the AB channel
-    l1_loss = gen_l1_loss(fake_image, AB_batch, lambda_=100)
-    gen_loss = hinge_loss + regularization_loss + l1_loss
-
-  tf.summary.scalar('generator_l1_loss', l1_loss, step=gen_optimizer.iterations)
-  tf.summary.scalar('generator_hinge_loss', hinge_loss, step=gen_optimizer.iterations)
-  tf.summary.scalar('generator_regularization_loss', regularization_loss, step=gen_optimizer.iterations)
-  tf.summary.scalar('generator_total_loss', gen_loss, step=gen_optimizer.iterations)
-
-  generator_gradients = gen_tape.gradient(gen_loss,
-                                          generator.trainable_variables)
-  gen_optimizer.apply_gradients(zip(generator_gradients,
-                                    generator.trainable_variables))
-
-@tf.function
-def discriminator_train_step(L_batch, AB_batch):
-  with tf.GradientTape() as disc_tape:
-    disc_real_loss = discriminator(tf.concat([L_batch, AB_batch], axis=3), sn_update=True)
-
-    fake_image = generator(L_batch, sn_update=True, **kargs)
-
-    disc_fake_loss = discriminator(tf.concat([L_batch, fake_image], axis=3), sn_update=True)
-
-    disc_loss = loss_hinge_dis(dis_fake=disc_fake_loss, dis_real=disc_real_loss)
-
-  tf.summary.scalar('discriminator_loss', disc_loss, step=dis_optimizer.iterations)
-  discriminator_gradients = disc_tape.gradient(disc_loss,
-                                               discriminator.trainable_variables)
-
-  dis_optimizer.apply_gradients(zip(discriminator_gradients,
-                                    discriminator.trainable_variables))
-
-@tf.function
+# @tf.function
 def train_step(L_batch, AB_batch):
-  with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-    fake_image = generator(L_batch, sn_update=True, **kargs)
+    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+        fake_batch = generator(L_batch, sn_update=True, **kwargs)
+        disc_patch_real = discriminator(tf.concat([L_batch, AB_batch], axis=3), sn_update=True, **kwargs)
+        disc_patch_fake = discriminator(tf.concat([L_batch, fake_batch], axis=3), sn_update=False, **kwargs)
 
-    disc_patch_real = discriminator(tf.concat([L_batch, AB_batch], axis=3), sn_update=True)
-    disc_patch_fake = discriminator(tf.concat([L_batch, fake_image], axis=3), sn_update=True)
+        gen_patch_loss = gen_binary_cross_entropy(disc_generated_output=disc_patch_fake)
+        disc_loss = disc_binary_cross_entropy(disc_real_output=disc_patch_real, disc_generated_output=disc_patch_fake)
 
-    gen_path_loss = gen_binary_cross_entropy(disc_generated_output=disc_patch_fake)
-    disc_loss = disc_binary_cross_entropy(disc_real_output=disc_patch_real, disc_generated_output=disc_patch_fake)
+        # L1 Loss could compare the 3 channel image instead of only the AB channel
+        l1_loss = gen_l1_loss(fake_batch, AB_batch, lambda_=100)
 
-    # L1 Loss could compare the 3 channel image instead of only the AB channel
-    l1_loss = gen_l1_loss(fake_image, AB_batch, lambda_=100)
+        # total generator loss
+        gen_loss = gen_patch_loss + l1_loss
 
-    # total generator loss
-    gen_loss = gen_path_loss + l1_loss
+    tf.summary.scalar('generator_l1_loss', l1_loss, step=gen_optimizer.iterations)
+    tf.summary.scalar('generator_patch_loss', gen_patch_loss, step=gen_optimizer.iterations)
+    tf.summary.scalar('generator_loss', gen_loss, step=gen_optimizer.iterations)
+    tf.summary.scalar('discriminator_loss', disc_loss, step=dis_optimizer.iterations)
 
-  # tf.summary.scalar('generator_patch_loss', gen_patch_loss, step=gen_optimizer.iterations)
-  # tf.summary.scalar('generator_feature_matching', feature_matching, step=gen_optimizer.iterations)
-  tf.summary.scalar('generator_l1_loss', l1_loss, step=gen_optimizer.iterations)
-  tf.summary.scalar('generator_patch_loss', gen_path_loss, step=gen_optimizer.iterations)
-  tf.summary.scalar('generator_loss', gen_loss, step=gen_optimizer.iterations)
+    generator_gradients = gen_tape.gradient(gen_loss,
+                                            generator.trainable_variables)
+    discriminator_gradients = disc_tape.gradient(disc_loss,
+                                                 discriminator.trainable_variables)
 
-  # tf.summary.scalar('discriminator_hinge_loss', disc_hinge_loss, step=dis_optimizer.iterations)
-  # tf.summary.scalar('discriminator_patch_loss', disc_patch_loss, step=dis_optimizer.iterations)
-  tf.summary.scalar('discriminator_loss', disc_loss, step=dis_optimizer.iterations)
-  # tf.summary.image('input_image', input_image * 0.5 + 0.5, max_outputs=12, step=gen_optimizer.iterations)
-  # tf.summary.image('generator_image', gen_output * 0.5 + 0.5, max_outputs=12, step=gen_optimizer.iterations)
+    gen_optimizer.apply_gradients(zip(generator_gradients,
+                                      generator.trainable_variables))
+    dis_optimizer.apply_gradients(zip(discriminator_gradients,
+                                      discriminator.trainable_variables))
 
-  generator_gradients = gen_tape.gradient(gen_loss,
-                                          generator.trainable_variables)
-  discriminator_gradients = disc_tape.gradient(disc_loss,
-                                               discriminator.trainable_variables)
-
-  gen_optimizer.apply_gradients(zip(generator_gradients,
-                                    generator.trainable_variables))
-  dis_optimizer.apply_gradients(zip(discriminator_gradients,
-                                    discriminator.trainable_variables))
 
 def train():
-  with train_summary_writer.as_default():
+    with train_summary_writer.as_default():
 
-    for L_batch, AB_batch in train_dataset:
+        for L_batch, AB_batch in train_dataset:
 
-      if tf.math.equal(gen_optimizer.iterations % SUMMARY_EVERY_N_STEPS, 0):
-        generate_images(generator, L_batch, AB_batch)
+            if tf.math.equal(gen_optimizer.iterations % SUMMARY_EVERY_N_STEPS, 0):
+                generate_images(generator, L_batch, AB_batch)
 
-      # if tf.math.equal(dis_optimizer.iterations % DISC_UPDATE, 0):
-      #   # perform a generator update
-      #   generator_train_step(L_batch, AB_batch)
-      #
-      # discriminator_train_step(L_batch, AB_batch)
-      train_step(L_batch, AB_batch)
+            # if tf.math.equal(dis_optimizer.iterations % DISC_UPDATE, 0):
+            #   # perform a generator update
+            #   generator_train_step(L_batch, AB_batch)
+            #
+            # discriminator_train_step(L_batch, AB_batch)
+            train_step(L_batch, AB_batch)
 
-    manager.save()
-    print("New checkpoints saved.")
+        manager.save()
+        print("New checkpoints saved.")
 
 
 train()

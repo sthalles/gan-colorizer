@@ -17,21 +17,19 @@ class BlockUp(tf.keras.Model):
         self.unpooling_2d = tf.keras.layers.UpSampling2D()
 
         self.c1 = SNConv2D(hidden_channels, kernel_size=kernel_size, padding=padding,
-                           kernel_initializer=initializer, kernel_regularizer=kernel_regularizer)
+                           kernel_initializer=initializer, kernel_regularizer=kernel_regularizer, use_bias=False)
 
         self.c2 = SNConv2D(out_channels, kernel_size=kernel_size, padding=padding,
-                           kernel_initializer=initializer, kernel_regularizer=kernel_regularizer)
+                           kernel_initializer=initializer, kernel_regularizer=kernel_regularizer, use_bias=False)
 
         self.b1 = tf.keras.layers.BatchNormalization()
         self.b2 = tf.keras.layers.BatchNormalization()
 
         if self.learnable_sc:
             self.c_sc = SNConv2D(out_channels, kernel_size=1, padding="VALID",
-                                 kernel_initializer=initializer, kernel_regularizer=kernel_regularizer)
+                                 kernel_initializer=initializer, kernel_regularizer=kernel_regularizer, use_bias=False)
 
-    def residual(self, x, sn_update, **kwargs):
-        assert sn_update is not None, "Specify the 'sn_update' parameter"
-        h = x
+    def residual(self, h, sn_update, **kwargs):
         h = self.b1(h, **kwargs)
         h = self.activation(h)
 

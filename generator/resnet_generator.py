@@ -1,9 +1,9 @@
 import tensorflow as tf
 from layers.transpose_conv_sn import SNTransposeConv2D
 from layers.sn_non_local_block import SNNonLocalBlock
-from layers.orthogonal_regularization import conv_orthogonal_regularizer, dense_orthogonal_regularizer
-from generator.resblock_down import OptimizedBlock, BlockDown
-from generator.resblock_up import BlockUp
+from layers.orthogonal_regularization import conv_orthogonal_regularizer
+from layers.resblock_down import OptimizedBlock, BlockDown
+from layers.resblock_up import BlockUp
 
 class UNetGenerator(tf.keras.Model):
     def __init__(self, ch, output_depth, activation=tf.keras.layers.ReLU()):
@@ -42,20 +42,20 @@ class UNetGenerator(tf.keras.Model):
                                       kernel_initializer=initializer,
                                       kernel_regularizer=kernel_regularizer)
 
-    def call(self, x, sn_update, **kwargs):
+    def call(self, h, sn_update, **kwargs):
         # encoder forward
-        down1 = self.down1(x, sn_update=sn_update, **kwargs)
+        down1 = self.down1(h, sn_update=sn_update, **kwargs)
         down2 = self.down2(down1, sn_update=sn_update, **kwargs)
-        down3 = self.down3(down2, sn_update=sn_update, **kwargs)
-        enc_attention = self.enc_attention(down3, sn_update=sn_update)
-        down4 = self.down4(enc_attention, sn_update=sn_update, **kwargs)
-        down5 = self.down5(down4, sn_update=sn_update, **kwargs)
-        down6 = self.down6(down5, sn_update=sn_update, **kwargs)
-        down7 = self.down7(down6, sn_update=sn_update, **kwargs)
-        down8 = self.down8(down7, sn_update=sn_update, **kwargs)
+        h = self.down3(down2, sn_update=sn_update, **kwargs)
+        h = self.enc_attention(h, sn_update=sn_update)
+        down4 = self.down4(h, sn_update=sn_update, **kwargs)
+        h = self.down5(down4, sn_update=sn_update, **kwargs)
+        down6 = self.down6(h, sn_update=sn_update, **kwargs)
+        h = self.down7(down6, sn_update=sn_update, **kwargs)
+        h = self.down8(h, sn_update=sn_update, **kwargs)
 
         # decoder forward
-        h = self.up1(down8, sn_update=sn_update, **kwargs)
+        h = self.up1(h, sn_update=sn_update, **kwargs)
         h = self.up2(h, sn_update=sn_update, **kwargs)
 
         h = self.concat([h, down6])
