@@ -2,7 +2,6 @@ import tensorflow as tf
 
 loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
-
 # Hinge Loss
 def loss_hinge_dis(dis_fake, dis_real):
   loss = tf.reduce_mean(tf.nn.relu(1. - dis_real))
