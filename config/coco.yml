@@ -1,21 +1,21 @@
 # conditional CIFAR10 generation with SN and projection discriminator
-batchsize: 32
+batchsize: 4
 disc_update: 2
 epochs: 4
-summary_every_n_steps: 300
+summary_every_n_steps: 4
 save_every_n_steps: 10000
 truncation: 0.5
 
 model:
   generator:
-    name: generator.resnet_generator
+    name: generator.generator
     args:
-      ch: 32
+      ch: 64
       output_depth: 2
 
 
   discriminator:
-    name: discriminator.patch_resnet_discriminator
+    name: discriminator.discriminator
     args:
       ch: 64
 

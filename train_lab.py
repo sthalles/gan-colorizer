@@ -1,7 +1,7 @@
 import tensorflow as tf
 # from discriminator.patch_resnet_discriminator import PatchResnetDiscriminator
-from discriminator.patch_resnet_discriminator import SNResNetPatchGanDiscriminator
-from generator.u_net_generator_128 import UNetGenerator
+from discriminator.discriminator import Discriminator
+from generator.generator import UNetGenerator
 from source.loss import gen_l1_loss, loss_hinge_dis, loss_hinge_gen, gen_binary_cross_entropy, disc_binary_cross_entropy
 import time
 import os
@@ -45,7 +45,7 @@ train_dataset = train_dataset.map(lambda x: random_crop(x, PATCH_SIZE, PATCH_SIZ
 train_dataset = train_dataset.map(random_flip)
 train_dataset = train_dataset.map(rgb_to_lab)
 train_dataset = train_dataset.map(preprocess_lab)
-train_dataset = train_dataset.map(random_noise)
+# train_dataset = train_dataset.map(random_noise)
 train_dataset = train_dataset.repeat(EPOCHS)
 train_dataset = train_dataset.shuffle(BUFFER_SIZE)
 train_dataset = train_dataset.batch(BATCH_SIZE)
@@ -58,7 +58,7 @@ generator_lib = importlib.import_module(gen_parameters['name'])
 discriminator_lib = importlib.import_module(disc_parameters['name'])
 
 generator = generator_lib.UNetGenerator(**gen_parameters['args'])
-discriminator = discriminator_lib.SNResNetPatchGanDiscriminator(**disc_parameters['args'])
+discriminator = discriminator_lib.Discriminator(**disc_parameters['args'])
 
 gen_optimizer_args = meta_parameters['optimizer']['generator']
 gen_optimizer = tf.keras.optimizers.Adam(**gen_optimizer_args)
@@ -102,17 +102,17 @@ def generate_images(model, L_batch, AB_batch):
 
     fake_image = model(L_batch, sn_update=False, training=True)
 
-    a_chan_fake, b_chan_fake = tf.unstack(fake_image, axis=3)
-    fake_lab_image = deprocess_lab(L_batch, a_chan_fake, b_chan_fake)
-    fake_rgb_image = lab_to_rgb(fake_lab_image)
+    # a_chan_fake, b_chan_fake = tf.unstack(fake_image, axis=3)
+    # fake_lab_image = deprocess_lab(L_batch, a_chan_fake, b_chan_fake)
+    # fake_rgb_image = lab_to_rgb(fake_lab_image)
+    #
+    # a_chan, b_chan = tf.unstack(AB_batch, axis=3)
+    # real_lab_image = deprocess_lab(L_batch, a_chan, b_chan)
+    # real_rgb_image = lab_to_rgb(real_lab_image)
 
-    a_chan, b_chan = tf.unstack(AB_batch, axis=3)
-    real_lab_image = deprocess_lab(L_batch, a_chan, b_chan)
-    real_rgb_image = lab_to_rgb(real_lab_image)
-
-    tf.summary.image('generator_image', fake_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
-    tf.summary.image('input_image', (L_batch + 1) * 0.5, max_outputs=12, step=gen_optimizer.iterations)
-    tf.summary.image('target_image', real_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
+    # tf.summary.image('generator_image', fake_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
+    tf.summary.image('input_image', (fake_image + 1) * 0.5, max_outputs=12, step=gen_optimizer.iterations)
+    # tf.summary.image('target_image', real_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
 
 
 kwargs = {'training': True}
@@ -165,7 +165,7 @@ def train_step(L_batch, AB_batch):
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         fake_batch = generator(L_batch, sn_update=True, **kwargs)
         disc_patch_real = discriminator(tf.concat([L_batch, AB_batch], axis=3), sn_update=True, **kwargs)
-        disc_patch_fake = discriminator(tf.concat([L_batch, fake_batch], axis=3), sn_update=False, **kwargs)
+        disc_patch_fake = discriminator(tf.concat([L_batch, fake_batch], axis=3), sn_update=True, **kwargs)
 
         gen_patch_loss = gen_binary_cross_entropy(disc_generated_output=disc_patch_fake)
         disc_loss = disc_binary_cross_entropy(disc_real_output=disc_patch_real, disc_generated_output=disc_patch_fake)
