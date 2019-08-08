@@ -102,17 +102,17 @@ def generate_images(model, L_batch, AB_batch):
 
     fake_image = model(L_batch, sn_update=False, training=True)
 
-    # a_chan_fake, b_chan_fake = tf.unstack(fake_image, axis=3)
-    # fake_lab_image = deprocess_lab(L_batch, a_chan_fake, b_chan_fake)
-    # fake_rgb_image = lab_to_rgb(fake_lab_image)
-    #
-    # a_chan, b_chan = tf.unstack(AB_batch, axis=3)
-    # real_lab_image = deprocess_lab(L_batch, a_chan, b_chan)
-    # real_rgb_image = lab_to_rgb(real_lab_image)
+    a_chan_fake, b_chan_fake = tf.unstack(fake_image, axis=3)
+    fake_lab_image = deprocess_lab(L_batch, a_chan_fake, b_chan_fake)
+    fake_rgb_image = lab_to_rgb(fake_lab_image)
 
-    # tf.summary.image('generator_image', fake_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
-    tf.summary.image('input_image', (fake_image + 1) * 0.5, max_outputs=12, step=gen_optimizer.iterations)
-    # tf.summary.image('target_image', real_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
+    a_chan, b_chan = tf.unstack(AB_batch, axis=3)
+    real_lab_image = deprocess_lab(L_batch, a_chan, b_chan)
+    real_rgb_image = lab_to_rgb(real_lab_image)
+
+    tf.summary.image('generator_image', fake_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
+    tf.summary.image('input_image', (L_batch + 1) * 0.5, max_outputs=12, step=gen_optimizer.iterations)
+    tf.summary.image('target_image', real_rgb_image, max_outputs=12, step=gen_optimizer.iterations)
 
 
 kwargs = {'training': True}
@@ -164,6 +164,7 @@ kwargs = {'training': True}
 def train_step(L_batch, AB_batch):
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         fake_batch = generator(L_batch, sn_update=True, **kwargs)
+
         disc_patch_real = discriminator(tf.concat([L_batch, AB_batch], axis=3), sn_update=True, **kwargs)
         disc_patch_fake = discriminator(tf.concat([L_batch, fake_batch], axis=3), sn_update=True, **kwargs)
 
@@ -175,6 +176,9 @@ def train_step(L_batch, AB_batch):
 
         # total generator loss
         gen_loss = gen_patch_loss + l1_loss
+
+    tf.summary.histogram(name="real_image_discributions", data=AB_batch, step=dis_optimizer.iterations)
+    tf.summary.histogram(name="fake_image_discributions", data=fake_batch, step=dis_optimizer.iterations)
 
     tf.summary.scalar('generator_l1_loss', l1_loss, step=gen_optimizer.iterations)
     tf.summary.scalar('generator_patch_loss', gen_patch_loss, step=gen_optimizer.iterations)
